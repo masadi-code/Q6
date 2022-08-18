@@ -34,7 +34,8 @@ implicit none
 	integer		:: mxpts=200,mxbin=10,mxstates=4
 	character(80)      ::filnam, line
 	integer           ::i,j,ifile,ipt,istate,ibin,nfiles,nstates,ERR, &
-	                      nskip,nbins,nmin,idum,noffd,nnoffd,offel,num_offd
+	                      nskip,nbins,nmin,idum,noffd,nnoffd,offel,num_offd, &
+						  state_a,state_b
 
 	type(OFFDIAG_SAVE),allocatable		:: offd(:)
 
@@ -118,7 +119,11 @@ end if
 2	format('# Number of states                 =',i6,/, &
 		   '# Number of off-diagonal elements =',i6)
 	mxstates = nstates
-
+	call prompt ('--> Specify state A and state B: ')
+	read(*,*) state_a, state_b
+	state_a = state_a
+	state_b = state_b
+	write(*, '(a,i4,/,a,i4)') '# State A = ',state_a,'# State B =',state_b 
 	!size of secular determinant is allocated
 
 	! Continue to read input
@@ -159,7 +164,7 @@ end if
 ! now know the number of bins needed -> allocate dependent variables + 1
 ! and we have all nstates dependent variables -> allocate nstate arrays
 	allocate(sumg(mxbin),sumg2(mxbin),avdvg(mxbin),avc1(mxbin),avc2(mxbin),avr(mxbin), &
-		binsum(mxbin,4),nbinpts(mxbin),ptsum(mxbin),STAT=ERR)
+		binsum(mxbin,6),nbinpts(mxbin),ptsum(mxbin),STAT=ERR)
 	if(ERR /= 0) then
 		stop '# >>> ERROR! Qfep5 terminated abnormally: Out of memory when allocating mxbin arrays'
 	end if
@@ -737,21 +742,21 @@ end if
 					veff=veff+FEP(ifile)%lambda(istate)*FEP(ifile)%v(j,istate,ipt)
 				end do  !states
 				do istate=1,nstates
-				dvv(istate)=FEP(ifile)%v(j,istate,ipt)-veff
+					dvv(istate)=FEP(ifile)%v(j,istate,ipt)-veff
 				end do !nstates
 				dvg=FEP(ifile)%vg(j,ipt)-veff
 				avdvv(:,ibin)=avdvv(:,ibin)+dvv(:)
 				avdvg(ibin)=avdvg(ibin)+dvg
-	         		avc1(ibin)=avc1(ibin)+FEP(ifile)%c1(j,ipt)
-                		avc2(ibin)=avc2(ibin)+FEP(ifile)%c2(j,ipt)
+	         	avc1(ibin)=avc1(ibin)+FEP(ifile)%c1(j,ipt)
+                avc2(ibin)=avc2(ibin)+FEP(ifile)%c2(j,ipt)
 				!Only gives first r_xy distance
 				if(num_offd > 0) avr(ibin)=avr(ibin)+FEP(ifile)%r(j,1,ipt)
-				nbinpts(ibin)=nbinpts(ibin)+1
+					nbinpts(ibin)=nbinpts(ibin)+1
 			end do          !ipt
 			do ibin=1,nbins
 				if ( nbinpts(ibin) .ne. 0 ) then
-			                avc1(ibin)=avc1(ibin)/real(nbinpts(ibin),kind=prec)
-			                avc2(ibin)=avc2(ibin)/real(nbinpts(ibin),kind=prec)
+			        avc1(ibin)=avc1(ibin)/real(nbinpts(ibin),kind=prec)
+			        avc2(ibin)=avc2(ibin)/real(nbinpts(ibin),kind=prec)
 					avr(ibin)=avr(ibin)/real(nbinpts(ibin),kind=prec)
 					avdvv(:,ibin)=avdvv(:,ibin)/nbinpts(ibin)
 					avdvg(ibin)=avdvg(ibin)/nbinpts(ibin)
@@ -774,58 +779,71 @@ end if
 			end do   !ipt
 
 			do ibin=1,nbins
-	if (nbinpts(ibin).ge.nmin) then
-	binsum(ibin,2)=binsum(ibin,2)+avc1(ibin)*nbinpts(ibin)
-binsum(ibin,3)=binsum(ibin,3)+avc2(ibin)*nbinpts(ibin)
-	binsum(ibin,4)=binsum(ibin,4)+avr(ibin)*nbinpts(ibin)  !Bin-averaged r_xy
-	sumv(:,ibin)=sumv(:,ibin)/real(nbinpts(ibin))
-sumg(ibin)=sumg(ibin)/real(nbinpts(ibin))
+				if (nbinpts(ibin).ge.nmin) then
+					binsum(ibin,2)=binsum(ibin,2)+avc1(ibin)*nbinpts(ibin)
+					binsum(ibin,3)=binsum(ibin,3)+avc2(ibin)*nbinpts(ibin)
+					binsum(ibin,4)=binsum(ibin,4)+avr(ibin)*nbinpts(ibin)  !Bin-averaged r_xy
+					sumv(:,ibin)=sumv(:,ibin)/real(nbinpts(ibin))
+					sumg(ibin)=sumg(ibin)/real(nbinpts(ibin))
 
-ptsum(ibin)=ptsum(ibin)+nbinpts(ibin)
+					ptsum(ibin)=ptsum(ibin)+nbinpts(ibin)
 
-	do istate=1,nstates
-sumv2(istate,ibin)=-rt*q_logarithm(sumv(istate,ibin))+avdvv(istate,ibin)
-	end do
-sumg2(ibin)=-rt*q_logarithm(sumg(ibin))+avdvg(ibin)
-	! These are the diabatic free energy curves
-dGv(:)=dG(j,ifile)+sumv2(:,ibin)
-	! This is the reaction free energy
-dGg=dG(j,ifile)+sumg2(ibin)
+					do istate=1,nstates
+						sumv2(istate,ibin)=-rt*q_logarithm(sumv(istate,ibin))+avdvv(istate,ibin)
+					end do
+					sumg2(ibin)=-rt*q_logarithm(sumg(ibin))+avdvg(ibin)
+					! These are the diabatic free energy curves
+					dGv(:)=dG(j,ifile)+sumv2(:,ibin)
+					! This is the reaction free energy
+					dGg=dG(j,ifile)+sumg2(ibin)
 
-binsum(ibin,1)=binsum(ibin,1)+dGg*int(nbinpts(ibin))
+					binsum(ibin,1)=binsum(ibin,1)+dGg*int(nbinpts(ibin))
+					binsum(ibin,5)=binsum(ibin,5)+dGv(state_a)*int(nbinpts(ibin))
+					binsum(ibin,6)=binsum(ibin,6)+dGv(state_b)*int(nbinpts(ibin))
 
-	write (*,26) FEP(ifile)%lambda(1),ibin, &
-	gapmin(j)+real(ibin,kind=prec)*xint-xint/2., dGv(1),dGv(2),dGg, &
-int(nbinpts(ibin)),avc1(ibin),avc2(ibin)
-	end if
-	end do  !ibin
+					write (*,26) FEP(ifile)%lambda(state_a),ibin, &
+						gapmin(j)+real(ibin,kind=prec)*xint-xint/2., dGv(state_a),dGv(state_b),dGg, &
+						int(nbinpts(ibin)),avc1(ibin),avc2(ibin)
+				end if
+		end do  !ibin
 	end do      !ifile
+
 	write(*,*)
 	write(*,*)
 	write(*,27)
-write(*,28)
+	write(*,28)
 
 	27		format('# Part 3: Bin-averaged summary:')
-	28		format('# bin  energy gap  <dGg> <dGg norm> pts  <c1**2> <c2**2> <r_xy>')
-
+	28		format('# bin  energy gap  <dGg> <dGg norm> pts  <c1**2> <c2**2> <r_xy>  <dGA> <dGB>')
 	do ibin=1,nbins
 	if (ptsum(ibin).ge.nmin) then
-	binsum(ibin,1)=binsum(ibin,1)/real(ptsum(ibin),kind=prec) ! Bin-averaged reaction free energy
- 	binsum(ibin,2)=binsum(ibin,2)/real(ptsum(ibin),kind=prec) ! Bin-averaged c1**2
- 	binsum(ibin,3)=binsum(ibin,3)/real(ptsum(ibin),kind=prec) ! Bin-averaged c2**2
-	binsum(ibin,4)=binsum(ibin,4)/real(ptsum(ibin),kind=prec) ! Bin-averaged r_xy
+		binsum(ibin,1)=binsum(ibin,1)/real(ptsum(ibin),kind=prec) ! Bin-averaged reaction free energy
+ 		binsum(ibin,2)=binsum(ibin,2)/real(ptsum(ibin),kind=prec) ! Bin-averaged c1**2
+ 		binsum(ibin,3)=binsum(ibin,3)/real(ptsum(ibin),kind=prec) ! Bin-averaged c2**2
+		binsum(ibin,4)=binsum(ibin,4)/real(ptsum(ibin),kind=prec) ! Bin-averaged r_xy
+		binsum(ibin,5)=binsum(ibin,5)/real(ptsum(ibin),kind=prec) ! Bin-averaged state 1 diabatic energy
+		binsum(ibin,6)=binsum(ibin,6)/real(ptsum(ibin),kind=prec) ! Bin-averaged state 2 diabatic energy
 	end if
  	end do
  	min=MINVAL(binsum(:,1))
  	do ibin=1,nbins
 		if (ptsum(ibin).ge.nmin) then
-29		format(i4,1x,f9.2,1x,f9.2,1x,f9.2,2x,i9,1x,f8.3,1x,f8.3,1x,f8.3,1x,f8.2,1x,f8.2,1x,f8.2,1x,f8.2)
+29		format(i4,1x,f9.2,1x,f9.2,1x,f9.2,2x,i9,1x,f8.3,1x,f8.3,1x,f8.3,1x,f8.2,1x,f8.2,1x,f8.2,1x,f8.2,f9.2,f9.2)
+!30		format(i4,1x,f9.2,1x,f9.2,1x,f9.2,2x,i9,1x,f8.3,1x,f8.3,1x,f8.3,1x,f8.2,1x,f8.2,1x,f8.2,1x,f8.2)
  		write(*,29) ibin,gapmin(j)+real(ibin,kind=prec)*xint-xint/2.,binsum(ibin,1),  &
- 		binsum(ibin,1)-min,int(ptsum(ibin)),binsum(ibin,2),binsum(ibin,3),binsum(ibin,4)
+ 			binsum(ibin,1)-min,int(ptsum(ibin)),binsum(ibin,2),binsum(ibin,3),binsum(ibin,4), &
+			binsum(ibin,5),binsum(ibin,6)
+!30			format(i4,1x,f9.2,1x)
+!			write(*,30) ibin,gapmin(j)+real(ibin,kind=prec)*xint-xint/2.
+			!write(*, '(a,1x,i4)') 'bar',ibin
         end if
+		!write(*, '(a,1x,i4)') 'foo',ibin
 	end do !ibin
 	end do !fileheader%arrays
 	end if !nfiles >1
+
+	! Needed for macOS?
+	call flush(6)
 
 	!clean up
 	do ifile=1,nfiles
